@@ -1,0 +1,2 @@
+# We don't want users data to be uploaded to github
+*.json

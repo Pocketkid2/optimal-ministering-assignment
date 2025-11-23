@@ -1,0 +1,26 @@
+[
+    {
+        "name": "Male Eligible",
+        "address": "1600 Amphitheatre Parkway, Mountain View, CA",
+        "gender": "male",
+        "eligible": true
+    },
+    {
+        "name": "Female Eligible",
+        "address": "1 Infinite Loop, Cupertino, CA",
+        "gender": "female",
+        "eligible": true
+    },
+    {
+        "name": "Male Ineligible",
+        "address": "350 Fifth Avenue, New York, NY",
+        "gender": "male",
+        "eligible": false
+    },
+    {
+        "name": "Female Ineligible",
+        "address": "405 Lexington Ave, New York, NY",
+        "gender": "female",
+        "eligible": false
+    }
+]
