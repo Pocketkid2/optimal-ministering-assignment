@@ -27,9 +27,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const manualGenderInput = document.getElementById('manual-gender');
     const manualEligibleInput = document.getElementById('manual-eligible');
     const findPairingsBtn = document.getElementById('find-pairings-btn');
+    const downloadBtn = document.getElementById('download-btn');
 
     manualAddBtn.addEventListener('click', handleManualEntry);
     findPairingsBtn.addEventListener('click', handleFindPairings);
+    downloadBtn.addEventListener('click', handleDownload);
 
     // Modal Elements
     const exclusionModal = document.getElementById('exclusion-modal');
@@ -526,5 +528,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const group = new L.featureGroup(pairingLines);
             map.fitBounds(group.getBounds().pad(0.1));
         }
+    }
+
+    function handleDownload() {
+        if (markers.length === 0) {
+            alert('No data to download.');
+            return;
+        }
+
+        const data = markers.map(marker => marker.data);
+        const jsonString = JSON.stringify(data, null, 4);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'ministering_data.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 });
