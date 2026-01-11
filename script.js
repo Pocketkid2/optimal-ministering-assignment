@@ -634,7 +634,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const resultsDiv = document.getElementById('pairings-results');
         const tbody = document.getElementById('pairings-body');
         tbody.innerHTML = '';
-        resultsDiv.style.display = 'block';
+        resultsDiv.style.display = 'flex';
 
         pairs.forEach((pair, index) => {
             const { p1, p2, distance } = pair;
