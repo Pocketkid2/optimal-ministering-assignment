@@ -8,6 +8,12 @@ document.addEventListener('DOMContentLoaded', () => {
         attribution: '© OpenStreetMap'
     }).addTo(map);
 
+    // Check for 'file:' protocol and warn user
+    if (window.location.protocol === 'file:') {
+        alert('Warning: You are opening this file directly. Geocoding and API features will NOT work due to browser security (CORS) restrictions.\n\nPlease run this project using a local web server (e.g., "python3 -m http.server"). See README.md for details.');
+        console.warn('Running via file:// protocol. Fetch requests will likely fail.');
+    }
+
     // UI Elements
     const fileInput = document.getElementById('file-input');
     const fileNameDisplay = document.getElementById('file-name');

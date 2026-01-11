@@ -21,6 +21,20 @@ A web-based tool to visualize addresses on a map, manage minister eligibility, a
 2.  Upload a JSON file (see `test_data.json` for format) or manually enter addresses.
 3.  Click "Find Optimal Pairings" to generate assignments.
 
+## Running the Project
+**Important:** Due to browser security policies (CORS), this application **cannot** be run by simply opening `index.html` as a file. You must serve it via a local web server.
+
+### Option 1: internal Python server (Recommended)
+If you have Python installed:
+1.  Open your terminal/command prompt in the project folder.
+2.  Run: `python3 -m http.server 8000`
+3.  Open `http://localhost:8000` in your browser.
+
+### Option 2: Node.js http-server
+If you have Node.js installed:
+1.  Run `npx http-server .`
+2.  Open the URL shown in the terminal.
+
 ## Data Format
 ```json
 [
