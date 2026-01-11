@@ -20,6 +20,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusMessage = document.getElementById('status-message');
     const progressBar = document.getElementById('progress-bar');
     const progressContainer = document.querySelector('.progress-container');
+    const consoleOutput = document.getElementById('console-output');
+    const clearConsoleBtn = document.getElementById('clear-console');
 
     // State
     let markers = [];
@@ -39,6 +41,12 @@ document.addEventListener('DOMContentLoaded', () => {
     manualAddBtn.addEventListener('click', handleManualEntry);
     findPairingsBtn.addEventListener('click', handleFindPairings);
     downloadBtn.addEventListener('click', handleDownload);
+
+    if (clearConsoleBtn) {
+        clearConsoleBtn.addEventListener('click', () => {
+            consoleOutput.innerHTML = '';
+        });
+    }
 
     // Modal Elements
     const exclusionModal = document.getElementById('exclusion-modal');
@@ -131,6 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
         progressContainer.style.display = 'block';
         progressBar.style.width = '0%';
         statusMessage.textContent = `Processing 0/${total} addresses...`;
+        logToConsole(`Starting batch processing of ${total} records...`, 'info');
 
         // We need to rate limit requests to Nominatim (max 1 per second)
         // We'll use a simple delay loop
@@ -150,9 +159,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     const eligible = item.eligible !== undefined ? item.eligible : true;
                     addMarker(coords, item.name || 'Unknown Name', item.address, gender, eligible);
                     successCount++;
+                } else {
+                    logToConsole(`Not Found: ${item.name || 'Unknown'} (${item.address})`, 'error');
                 }
             } catch (err) {
                 console.warn(`Failed to geocode: ${item.address}`, err);
+                logToConsole(`Failed: ${item.name || 'Unknown'} (${item.address})`, 'error');
             }
 
             processed++;
@@ -333,7 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Update popup with remaining people
             const popupContent = createMultiPersonPopupContent(locationData.people);
             locationData.marker.setPopupContent(popupContent);
-            
+
             // Update marker styles
             const markerEl = locationData.marker.getElement();
             if (markerEl) {
@@ -421,18 +433,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     // If address changed, move marker and update grouping
                     if (newAddress !== address) {
                         marker.setLatLng([newCoords.lat, newCoords.lon]);
-                        
+
                         // Reorganize location tracking
                         const oldKey = coordKey;
                         const newKey = `${newCoords.lat.toFixed(6)},${newCoords.lon.toFixed(6)}`;
-                        
+
                         if (newKey !== oldKey) {
                             // Remove from old location
                             locationData.people.splice(personIndex, 1);
                             if (locationData.people.length === 0) {
                                 delete markersByLocation[oldKey];
                             }
-                            
+
                             // Add to new location (or create new marker)
                             const personData = { name: newName, address: newAddress, gender: newGender, eligible: newEligible };
                             if (markersByLocation[newKey]) {
@@ -695,5 +707,15 @@ document.addEventListener('DOMContentLoaded', () => {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    }
+    function logToConsole(message, type = 'info') {
+        if (!consoleOutput) return;
+        const entry = document.createElement('div');
+        entry.className = `log-entry ${type}`;
+        const time = new Date().toLocaleTimeString();
+        // Safe HTML insertion
+        entry.innerHTML = `<span class="log-time">[${time}]</span> ${escapeHtml(message)}`;
+        consoleOutput.appendChild(entry);
+        consoleOutput.scrollTop = consoleOutput.scrollHeight;
     }
 });
