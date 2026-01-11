@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // State
     let markers = [];
+    let markersByLocation = {}; // Group markers by coordinates
 
     // Event Listeners
     fileInput.addEventListener('change', handleFileUpload);
@@ -121,6 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Clear existing markers
         markers.forEach(marker => map.removeLayer(marker));
         markers = [];
+        markersByLocation = {};
 
         const total = data.length;
         let processed = 0;
@@ -203,72 +205,153 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function addMarker(coords, name, address, gender, eligible) {
+        const coordKey = `${coords.lat.toFixed(6)},${coords.lon.toFixed(6)}`;
+
+        // Check if a marker already exists at this location
+        if (markersByLocation[coordKey]) {
+            // Add person to existing marker's data
+            markersByLocation[coordKey].people.push({ name, address, gender, eligible });
+            // Update the popup to show all people at this location
+            const marker = markersByLocation[coordKey].marker;
+            const popupContent = createMultiPersonPopupContent(markersByLocation[coordKey].people);
+            marker.setPopupContent(popupContent);
+            return;
+        }
+
+        // Create new marker for this location
         const marker = L.marker([coords.lat, coords.lon]).addTo(map);
 
-        // Apply styles
+        // Store people data
+        markersByLocation[coordKey] = {
+            marker: marker,
+            people: [{ name, address, gender, eligible }],
+            coords: coords
+        };
+
+        // Apply styles based on first person (or check if any are female/ineligible)
         const markerEl = marker.getElement();
         if (markerEl) {
-            if (gender === 'female') {
+            const hasAnyFemale = [{ name, address, gender, eligible }].some(p => p.gender === 'female');
+            const hasAnyIneligible = [{ name, address, gender, eligible }].some(p => !p.eligible);
+            if (hasAnyFemale) {
                 markerEl.classList.add('marker-female');
             }
-            if (!eligible) {
+            if (hasAnyIneligible) {
                 markerEl.classList.add('marker-ineligible');
             }
         }
 
-        // Store original data on the marker object for easy access
-        marker.data = { name, address, gender, eligible };
-
-        const popupContent = createPopupContent(name, address, gender, eligible);
+        // Create initial popup content
+        const popupContent = createMultiPersonPopupContent([{ name, address, gender, eligible }]);
         marker.bindPopup(popupContent);
 
         // Event delegation for popup buttons
         marker.on('popupopen', () => {
             const popupNode = marker.getPopup().getElement();
 
-            // Remove button
-            const removeBtn = popupNode.querySelector('.btn-remove');
-            if (removeBtn) {
-                removeBtn.onclick = () => removeMarker(marker);
-            }
+            // Remove buttons for each person
+            const removeBtns = popupNode.querySelectorAll('.btn-remove');
+            removeBtns.forEach((btn, index) => {
+                btn.onclick = () => removePersonFromMarker(coordKey, index);
+            });
 
-            // Edit button
-            const editBtn = popupNode.querySelector('.btn-edit');
-            if (editBtn) {
-                editBtn.onclick = () => editMarker(marker);
-            }
+            // Edit buttons for each person
+            const editBtns = popupNode.querySelectorAll('.btn-edit');
+            editBtns.forEach((btn, index) => {
+                btn.onclick = () => editPersonAtMarker(coordKey, index);
+            });
         });
 
         markers.push(marker);
     }
 
-    function createPopupContent(name, address, gender, eligible) {
-        const genderDisplay = gender.charAt(0).toUpperCase() + gender.slice(1);
-        const eligibleDisplay = eligible ? 'Eligible' : 'Not Eligible';
+    function createMultiPersonPopupContent(peopleList) {
+        if (peopleList.length === 1) {
+            // Single person - use original format
+            const { name, address, gender, eligible } = peopleList[0];
+            const genderDisplay = gender.charAt(0).toUpperCase() + gender.slice(1);
+            const eligibleDisplay = eligible ? 'Eligible' : 'Not Eligible';
 
-        return `
-            <div class="popup-content-view">
-                <div class="popup-name">${escapeHtml(name)}</div>
-                <div class="popup-address">${escapeHtml(address)}</div>
-                <div class="popup-details">
-                    <span class="popup-tag">${escapeHtml(genderDisplay)}</span>
-                    <span class="popup-tag">${escapeHtml(eligibleDisplay)}</span>
+            return `
+                <div class="popup-content-view">
+                    <div class="popup-name">${escapeHtml(name)}</div>
+                    <div class="popup-address">${escapeHtml(address)}</div>
+                    <div class="popup-details">
+                        <span class="popup-tag">${escapeHtml(genderDisplay)}</span>
+                        <span class="popup-tag">${escapeHtml(eligibleDisplay)}</span>
+                    </div>
+                    <div class="popup-actions">
+                        <button class="popup-btn btn-edit">Edit</button>
+                        <button class="popup-btn btn-remove">Remove</button>
+                    </div>
                 </div>
-                <div class="popup-actions">
-                    <button class="popup-btn btn-edit">Edit</button>
-                    <button class="popup-btn btn-remove">Remove</button>
+            `;
+        } else {
+            // Multiple people at same address
+            const peopleHtml = peopleList.map((person, index) => {
+                const genderDisplay = person.gender.charAt(0).toUpperCase() + person.gender.slice(1);
+                const eligibleDisplay = person.eligible ? 'Eligible' : 'Not Eligible';
+                return `
+                    <div class="popup-person-item" data-index="${index}">
+                        <div class="popup-name">${escapeHtml(person.name)}</div>
+                        <div class="popup-details">
+                            <span class="popup-tag">${escapeHtml(genderDisplay)}</span>
+                            <span class="popup-tag">${escapeHtml(eligibleDisplay)}</span>
+                        </div>
+                        <div class="popup-actions popup-actions-compact">
+                            <button class="popup-btn btn-edit" data-index="${index}">Edit</button>
+                            <button class="popup-btn btn-remove" data-index="${index}">Remove</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="popup-content-view popup-multiple">
+                    <div class="popup-address">${escapeHtml(peopleList[0].address)}</div>
+                    <div class="popup-count">${peopleList.length} people at this location</div>
+                    <div class="popup-people-list">
+                        ${peopleHtml}
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
+        }
     }
 
-    function removeMarker(marker) {
-        map.removeLayer(marker);
-        markers = markers.filter(m => m !== marker);
+    function removePersonFromMarker(coordKey, personIndex) {
+        const locationData = markersByLocation[coordKey];
+        if (!locationData) return;
+
+        locationData.people.splice(personIndex, 1);
+
+        if (locationData.people.length === 0) {
+            // Remove marker if no people left
+            map.removeLayer(locationData.marker);
+            markers = markers.filter(m => m !== locationData.marker);
+            delete markersByLocation[coordKey];
+        } else {
+            // Update popup with remaining people
+            const popupContent = createMultiPersonPopupContent(locationData.people);
+            locationData.marker.setPopupContent(popupContent);
+            
+            // Update marker styles
+            const markerEl = locationData.marker.getElement();
+            if (markerEl) {
+                const hasAnyFemale = locationData.people.some(p => p.gender === 'female');
+                const hasAnyIneligible = locationData.people.some(p => !p.eligible);
+                markerEl.classList.remove('marker-female', 'marker-ineligible');
+                if (hasAnyFemale) markerEl.classList.add('marker-female');
+                if (hasAnyIneligible) markerEl.classList.add('marker-ineligible');
+            }
+        }
     }
 
-    function editMarker(marker) {
-        const { name, address, gender, eligible } = marker.data;
+    function editPersonAtMarker(coordKey, personIndex) {
+        const locationData = markersByLocation[coordKey];
+        if (!locationData) return;
+
+        const person = locationData.people[personIndex];
+        const { name, address, gender, eligible } = person;
 
         const editContent = `
             <div class="popup-edit-form">
@@ -289,6 +372,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
 
+        const marker = locationData.marker;
         marker.setPopupContent(editContent);
 
         setTimeout(() => {
@@ -319,7 +403,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 try {
                     // Only re-geocode if address changed
-                    let newCoords = marker.getLatLng();
+                    let newCoords = locationData.coords;
                     if (newAddress !== address) {
                         const result = await geocodeAddress(newAddress);
                         if (!result) {
@@ -331,23 +415,58 @@ document.addEventListener('DOMContentLoaded', () => {
                         newCoords = result;
                     }
 
-                    // Update marker
-                    marker.setLatLng([newCoords.lat, newCoords.lon]);
-                    marker.data = { name: newName, address: newAddress, gender: newGender, eligible: newEligible };
+                    // Update person data
+                    locationData.people[personIndex] = { name: newName, address: newAddress, gender: newGender, eligible: newEligible };
 
-                    // Update styles
+                    // If address changed, move marker and update grouping
+                    if (newAddress !== address) {
+                        marker.setLatLng([newCoords.lat, newCoords.lon]);
+                        
+                        // Reorganize location tracking
+                        const oldKey = coordKey;
+                        const newKey = `${newCoords.lat.toFixed(6)},${newCoords.lon.toFixed(6)}`;
+                        
+                        if (newKey !== oldKey) {
+                            // Remove from old location
+                            locationData.people.splice(personIndex, 1);
+                            if (locationData.people.length === 0) {
+                                delete markersByLocation[oldKey];
+                            }
+                            
+                            // Add to new location (or create new marker)
+                            const personData = { name: newName, address: newAddress, gender: newGender, eligible: newEligible };
+                            if (markersByLocation[newKey]) {
+                                markersByLocation[newKey].people.push(personData);
+                                const popup = createMultiPersonPopupContent(markersByLocation[newKey].people);
+                                markersByLocation[newKey].marker.setPopupContent(popup);
+                            } else {
+                                markersByLocation[newKey] = {
+                                    marker: marker,
+                                    people: [personData],
+                                    coords: newCoords
+                                };
+                            }
+                        }
+                    }
+
+                    // Update marker styles
                     const markerEl = marker.getElement();
                     if (markerEl) {
+                        const hasAnyFemale = locationData.people.some(p => p.gender === 'female');
+                        const hasAnyIneligible = locationData.people.some(p => !p.eligible);
                         markerEl.classList.remove('marker-female', 'marker-ineligible');
-                        if (newGender === 'female') markerEl.classList.add('marker-female');
-                        if (!newEligible) markerEl.classList.add('marker-ineligible');
+                        if (hasAnyFemale) markerEl.classList.add('marker-female');
+                        if (hasAnyIneligible) markerEl.classList.add('marker-ineligible');
                     }
 
                     // Restore view
-                    marker.setPopupContent(createPopupContent(newName, newAddress, newGender, newEligible));
+                    const popupContent = createMultiPersonPopupContent(locationData.people);
+                    marker.setPopupContent(popupContent);
 
-                    // If we moved the marker, we might want to pan to it
-                    map.panTo([newCoords.lat, newCoords.lon]);
+                    // Pan to updated marker if address changed
+                    if (newAddress !== address) {
+                        map.panTo([newCoords.lat, newCoords.lon]);
+                    }
 
                 } catch (error) {
                     console.error('Update error:', error);
@@ -358,7 +477,8 @@ document.addEventListener('DOMContentLoaded', () => {
             };
 
             cancelBtn.onclick = () => {
-                marker.setPopupContent(createPopupContent(name, address, gender, eligible));
+                const popupContent = createMultiPersonPopupContent(locationData.people);
+                marker.setPopupContent(popupContent);
             };
         }, 0);
     }
@@ -374,43 +494,55 @@ document.addEventListener('DOMContentLoaded', () => {
     let pairingLines = []; // Store polyline objects
 
     function handleFindPairings() {
-        const eligibleMinisters = markers.filter(m => m.data.eligible);
+        // Collect all eligible people from all markers
+        let eligiblePeople = [];
+        Object.values(markersByLocation).forEach(locationData => {
+            locationData.people.forEach(person => {
+                if (person.eligible) {
+                    eligiblePeople.push({
+                        person: person,
+                        marker: locationData.marker,
+                        coords: locationData.coords
+                    });
+                }
+            });
+        });
 
-        if (eligibleMinisters.length < 2) {
+        if (eligiblePeople.length < 2) {
             alert('Need at least 2 eligible ministers to form pairings.');
             return;
         }
 
-        if (eligibleMinisters.length % 2 !== 0) {
-            showExclusionModal(eligibleMinisters);
+        if (eligiblePeople.length % 2 !== 0) {
+            showExclusionModal(eligiblePeople);
         } else {
-            calculatePairings(eligibleMinisters);
+            calculatePairings(eligiblePeople);
         }
     }
 
-    function showExclusionModal(ministers) {
+    function showExclusionModal(people) {
         exclusionList.innerHTML = '';
-        ministers.forEach(m => {
-            const item = document.createElement('div');
-            item.className = 'exclusion-item';
-            item.textContent = `${m.data.name} (${m.data.address})`;
-            item.onclick = () => {
+        people.forEach((item, index) => {
+            const div = document.createElement('div');
+            div.className = 'exclusion-item';
+            div.textContent = `${item.person.name} (${item.person.address})`;
+            div.onclick = () => {
                 exclusionModal.style.display = 'none';
-                const remaining = ministers.filter(min => min !== m);
+                const remaining = people.filter((_, i) => i !== index);
                 calculatePairings(remaining);
             };
-            exclusionList.appendChild(item);
+            exclusionList.appendChild(div);
         });
         exclusionModal.style.display = 'flex';
     }
 
-    async function calculatePairings(ministers) {
+    async function calculatePairings(peopleList) {
         statusMessage.textContent = 'Fetching distance matrix...';
         statusMessage.style.color = 'var(--text-secondary)';
 
         try {
             // 1. Fetch Distance Matrix from OSRM
-            const coordinates = ministers.map(m => `${m.getLatLng().lng},${m.getLatLng().lat}`).join(';');
+            const coordinates = peopleList.map(p => `${p.coords.lon},${p.coords.lat}`).join(';');
             const url = `https://router.project-osrm.org/table/v1/driving/${coordinates}?annotations=distance`;
 
             const response = await fetch(url);
@@ -423,7 +555,7 @@ document.addEventListener('DOMContentLoaded', () => {
             statusMessage.textContent = 'Optimizing pairings...';
 
             // Initial solution: Random or simple sequential
-            let indices = Array.from({ length: ministers.length }, (_, i) => i);
+            let indices = Array.from({ length: peopleList.length }, (_, i) => i);
             // Shuffle indices for random start
             indices.sort(() => Math.random() - 0.5);
 
@@ -464,10 +596,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // Map indices back to minister objects
+            // Map indices back to person objects
             const finalPairings = pairs.map(pair => ({
-                m1: ministers[pair[0]],
-                m2: ministers[pair[1]],
+                p1: peopleList[pair[0]],
+                p2: peopleList[pair[1]],
                 distance: matrix[pair[0]][pair[1]]
             }));
 
@@ -493,12 +625,14 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsDiv.style.display = 'block';
 
         pairs.forEach((pair, index) => {
-            const { m1, m2, distance } = pair;
-            const p1 = m1.getLatLng();
-            const p2 = m2.getLatLng();
+            const { p1, p2, distance } = pair;
+            const lat1 = p1.coords.lat;
+            const lon1 = p1.coords.lon;
+            const lat2 = p2.coords.lat;
+            const lon2 = p2.coords.lon;
 
             // Draw line
-            const line = L.polyline([p1, p2], {
+            const line = L.polyline([[lat1, lon1], [lat2, lon2]], {
                 color: 'var(--primary-color)',
                 weight: 4,
                 opacity: 0.7
@@ -513,7 +647,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     className: 'same-address-tooltip'
                 })
                     .setContent(`Pair ${index + 1}: Same Address`)
-                    .setLatLng(p1)
+                    .setLatLng([lat1, lon1])
                     .addTo(map);
                 pairingLines.push(note); // Add to array to clear later
             }
@@ -522,8 +656,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td>${index + 1}</td>
-                <td>${m1.data.name}<br><small>${m1.data.address}</small></td>
-                <td>${m2.data.name}<br><small>${m2.data.address}</small></td>
+                <td>${p1.person.name}<br><small>${p1.person.address}</small></td>
+                <td>${p2.person.name}<br><small>${p2.person.address}</small></td>
                 <td>${(distance / 1609.34).toFixed(2)} miles</td>
             `;
             tbody.appendChild(row);
@@ -542,7 +676,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const data = markers.map(marker => marker.data);
+        // Collect all people from all locations
+        const data = [];
+        Object.values(markersByLocation).forEach(locationData => {
+            locationData.people.forEach(person => {
+                data.push(person);
+            });
+        });
+
         const jsonString = JSON.stringify(data, null, 4);
         const blob = new Blob([jsonString], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
